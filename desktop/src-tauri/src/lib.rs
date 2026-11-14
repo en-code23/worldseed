@@ -12,8 +12,18 @@ struct AppState {
     cancel: Mutex<Arc<AtomicBool>>,
 }
 
+/// Per-user working folder for generated worlds (never the shared /tmp).
 fn tmp_root() -> PathBuf {
-    std::env::temp_dir().join("worldseed")
+    let base = if cfg!(target_os = "windows") {
+        std::env::var_os("LOCALAPPDATA").map(PathBuf::from)
+    } else if cfg!(target_os = "macos") {
+        std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Library/Caches"))
+    } else {
+        std::env::var_os("XDG_CACHE_HOME")
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))
+    };
+    base.unwrap_or_else(std::env::temp_dir).join("app.worldseed").join("worlds")
 }
 
 fn rand_u64() -> u64 {

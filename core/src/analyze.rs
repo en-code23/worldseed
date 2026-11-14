@@ -239,7 +239,7 @@ pub fn analyze(wd: &World) -> Analysis {
         t != 0 && set.contains(&(t - 1))
     };
     let mut pois: Vec<Poi> = vec![];
-    let mut push = |kind: &'static str, label: &str, x: i32, y: i32, ww: i32, hh: i32, detail: String| Poi {
+    let push = |kind: &'static str, label: &str, x: i32, y: i32, ww: i32, hh: i32, detail: String| Poi {
         kind,
         label: label.to_string(),
         x,

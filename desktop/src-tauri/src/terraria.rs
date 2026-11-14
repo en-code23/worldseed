@@ -175,7 +175,6 @@ pub fn generate(
     let mut buf = [0u8; 4096];
     let mut acc = String::new();
     let mut created = false;
-    let mut done = false;
     let result = loop {
         if cancel.load(Ordering::Relaxed) {
             break Err("cancelled".to_string());
@@ -184,7 +183,7 @@ pub fn generate(
             break Err("World generation timed out".into());
         }
         let n = match stdout.read(&mut buf) {
-            Ok(0) => break if done { Ok(()) } else { Err("TerrariaServer exited before the world was saved".into()) },
+            Ok(0) => break if false { Ok(()) } else { Err("TerrariaServer exited before the world was saved".into()) },
             Ok(n) => n,
             Err(e) => break Err(e.to_string()),
         };
@@ -204,7 +203,6 @@ pub fn generate(
             }
         }
         if created && acc.contains("Choose World") {
-            done = true;
             break Ok(());
         }
     };

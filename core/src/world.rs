@@ -265,11 +265,10 @@ impl World {
             let mut y = 0usize;
             while y < hh {
                 let h1 = r.u8()?;
-                let mut h2 = 0u8;
-                let mut h3 = 0u8;
+                                let mut h3 = 0u8;
                 let mut h4 = 0u8;
                 if h1 & 1 != 0 {
-                    h2 = r.u8()?;
+                    let h2 = r.u8()?;
                     if h2 & 1 != 0 {
                         h3 = r.u8()?;
                         if version >= 269 && h3 & 1 != 0 {

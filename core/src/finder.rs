@@ -127,7 +127,7 @@ pub fn hints(a: &Analysis) -> Vec<Hint> {
 pub fn judge(a: &Analysis, g: &Goals) -> Verdict {
     let mut v = Verdict { pass: true, ..Default::default() };
     let s = &a.summary;
-    let mut need = |ok: bool, label: String, v: &mut Verdict, weight: f64| {
+    let need = |ok: bool, label: String, v: &mut Verdict, weight: f64| {
         if ok {
             v.met.push(label);
             v.score += weight;
