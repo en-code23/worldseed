@@ -1,0 +1,7 @@
+{
+  "appId": "app.worldseed.mobile",
+  "appName": "Worldseed",
+  "webDir": "../web/dist",
+  "server": { "androidScheme": "https" },
+  "ios": { "contentInset": "always" }
+}

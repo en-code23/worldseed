@@ -1,0 +1,10 @@
+{
+  "name": "Worldseed",
+  "short_name": "Worldseed",
+  "description": "Terraria seed builder and world map viewer",
+  "start_url": "./app/index.html",
+  "display": "standalone",
+  "background_color": "#0d2f21",
+  "theme_color": "#0d2f21",
+  "icons": [{ "src": "icon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }]
+}

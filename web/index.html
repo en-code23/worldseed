@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Worldseed</title>
+  <meta name="description" content="Worldseed builds Terraria seeds, finds lucky worlds without spoilers, and maps every chest, shrine and structure. For Mac, Windows, Linux, Android and the web.">
+  <meta name="theme-color" content="#0d2f21">
+  <meta property="og:title" content="Worldseed">
+  <meta property="og:description" content="Real Terraria worlds, mapped: every chest, shrine and secret seed.">
+  <meta property="og:image" content="shots/map.jpg">
+  <link rel="icon" href="icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prata&family=Manrope:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="src/styles/site.css">
+  <script>if (window.Capacitor) location.replace("app/index.html");</script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="nav">
+    <div class="container nav__in">
+      <a class="wordmark" href="./">Worldseed</a>
+      <nav aria-label="Main">
+        <ul class="nav__links">
+          <li><a href="#features">Features</a></li>
+          <li><a href="#seeds">Seeds</a></li>
+          <li><a href="#download">Download</a></li>
+        </ul>
+      </nav>
+      <a class="pill-cmd" href="app/index.html?sample">Open in browser <kbd>.wld</kbd></a>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <div class="container hero__grid">
+        <div class="hero__text">
+          <h1>Know your world before you dig.</h1>
+          <p class="lead">Real Terraria worlds, mapped: every chest, shrine and secret seed.</p>
+          <div class="actions">
+            <a class="btn btn--primary" id="dl-main" href="#download">Download</a>
+            <a class="btn btn--secondary" href="app/index.html?sample">Open in browser</a>
+          </div>
+          <p class="hero__also" id="dl-also">Free for Mac, Windows, Linux and Android.</p>
+        </div>
+        <figure class="hero__shot">
+          <img src="shots/map.jpg" width="1440" height="900" alt="Worldseed showing a medium world: the jungle, its temple, a desert pyramid, spawn and every chest marked on the map." fetchpriority="high">
+        </figure>
+      </div>
+    </section>
+
+    <section class="pair band" aria-labelledby="pair-h">
+      <div class="container">
+        <h2 id="pair-h">Lucky, without the spoilers.</h2>
+        <div class="pair__grid">
+          <figure>
+            <img src="shots/shield.jpg" width="1440" height="900" loading="lazy" alt="The spoiler shield: the map is hidden and the panel lists four rare items, one sword shrine, seven sky islands and a pyramid.">
+            <figcaption>The shield says what the world holds.</figcaption>
+          </figure>
+          <figure>
+            <img src="shots/hints.jpg" width="1440" height="900" loading="lazy" alt="Hints opened step by step, from a vague direction to an exact place.">
+            <figcaption>Hints say where, one step at a time, only if you ask.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="switch" id="features" aria-labelledby="sw-h">
+      <div class="container">
+        <h2 id="sw-h">Three tools, one world.</h2>
+        <div class="switch__grid">
+          <div class="switch__tabs" role="tablist" aria-label="Features">
+            <button role="tab" id="t-find" aria-controls="p-find" aria-selected="true">
+              <span class="switch__name">Find</span>
+              <span class="switch__line">Your own Terraria generates worlds and keeps the lucky ones. Built for long playthroughs, speedruns, challenges and servers.</span>
+            </button>
+            <button role="tab" id="t-create" aria-controls="p-create" aria-selected="false" tabindex="-1">
+              <span class="switch__name">Create</span>
+              <span class="switch__line">The whole world menu, every secret seed, and a lean on Crimson or Corruption.</span>
+            </button>
+            <button role="tab" id="t-map" aria-controls="p-map" aria-selected="false" tabindex="-1">
+              <span class="switch__name">Map</span>
+              <span class="switch__line">Open any world file. Click a chest to read its loot.</span>
+            </button>
+          </div>
+          <div class="switch__frames">
+            <figure role="tabpanel" id="p-find" aria-labelledby="t-find"><img src="shots/find.jpg" width="1440" height="900" loading="lazy" alt="The Find tab with presets: Lucky explorer, Speedrun, Challenge, Multiplayer and Custom."></figure>
+            <figure role="tabpanel" id="p-create" aria-labelledby="t-create" hidden><img src="shots/create.jpg" width="1440" height="900" loading="lazy" alt="The Create tab: size, difficulty, a slider that leans the world evil, and special and secret seed toggles."></figure>
+            <figure role="tabpanel" id="p-map" aria-labelledby="t-map" hidden><img src="shots/map.jpg" width="1440" height="900" loading="lazy" alt="The map tab with markers for chests, orbs, altars, life crystals and structures."></figure>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="figures band" aria-label="What is covered">
+      <div class="container figures__row">
+        <p><span class="figure">9</span><span class="figures__l">special seeds</span></p>
+        <p><span class="figure figure--signal">37</span><span class="figures__l">secret seeds from 1.4.5</span></p>
+        <p><span class="figure">8</span><span class="figures__l">game versions</span></p>
+      </div>
+    </section>
+
+    <section class="guide" id="seeds" aria-labelledby="guide-h">
+      <div class="container">
+        <h2 id="guide-h">Secret seeds, in plain sight.</h2>
+        <ol class="index">
+          <li><span class="index__name">Extra floating islands</span><code>the care bears movie</code><span>Many more sky islands.</span></li>
+          <li><span class="index__name">Dual dungeons</span><code>double daring dangers</code><span>Two dungeons in one world.</span></li>
+          <li><span class="index__name">Start in Hardmode</span><code>too easy</code><span>The world begins in Hardmode.</span></li>
+          <li><span class="index__name">Planetoids</span><code>planetoids</code><span>The world is made of round landmasses.</span></li>
+          <li><span class="index__name">Portal Gun in chests</span><code>we don't even test for that</code><span>Any chest may hold a Portal Gun.</span></li>
+        </ol>
+        <a class="more" href="app/index.html#seeds">All 46 seeds and codes</a>
+      </div>
+    </section>
+
+    <section class="platforms" aria-labelledby="pl-h">
+      <div class="container">
+        <h2 id="pl-h">Where it runs.</h2>
+        <table class="log">
+          <thead><tr><th scope="col">Platform</th><th scope="col">What it does</th><th scope="col">Needs</th></tr></thead>
+          <tbody>
+            <tr><td>Mac, Windows, Linux</td><td>Generates, finds, maps, installs</td><td>Terraria</td></tr>
+            <tr><td>Web</td><td>Maps world files, builds seeds</td><td>A browser</td></tr>
+            <tr><td>Android</td><td>The web app, installed</td><td>The APK</td></tr>
+            <tr><td>iPhone and iPad</td><td>The web app on your Home Screen</td><td>Safari</td></tr>
+          </tbody>
+        </table>
+        <p class="aside">Worlds come from your own Terraria's generator, so they match the game exactly.</p>
+      </div>
+    </section>
+
+    <section class="close" id="download" aria-labelledby="dl-h">
+      <div class="container close__grid">
+        <div>
+          <h2 id="dl-h">Make the next world a good one.</h2>
+          <ul class="dl">
+            <li><a class="btn btn--primary" data-os="mac" href="https://github.com/en-code23/worldseed/releases/latest/download/Worldseed-mac.dmg">Mac</a></li>
+            <li><a class="btn btn--secondary" data-os="win" href="https://github.com/en-code23/worldseed/releases/latest/download/Worldseed-windows-setup.exe">Windows</a></li>
+            <li><a class="btn btn--secondary" data-os="linux" href="https://github.com/en-code23/worldseed/releases/latest/download/Worldseed-linux.AppImage">Linux</a></li>
+            <li><a class="btn btn--secondary" data-os="android" href="https://github.com/en-code23/worldseed/releases/latest/download/Worldseed-android.apk">Android</a></li>
+          </ul>
+          <p class="aside">Not code-signed yet: on Mac, right-click and choose Open once.</p>
+        </div>
+        <figure><img src="shots/create.jpg" width="1440" height="900" loading="lazy" alt="Creating a large Master world with extra floating islands and living trees."></figure>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="container">
+      <p class="foot__line">Runs on your device. Nothing is uploaded.</p>
+      <ul class="foot__links">
+        <li><a href="app/index.html">Web app</a></li>
+        <li><a href="https://github.com/en-code23/worldseed">Source on GitHub</a></li>
+        <li><a href="https://github.com/en-code23/worldseed/releases">All releases</a></li>
+      </ul>
+      <p class="foot__legal">Worldseed is a fan project, not affiliated with Re-Logic. Terraria is a trademark of Re-Logic.</p>
+    </div>
+  </footer>
+  <script type="module" src="src/site.ts"></script>
+</body>
+</html>

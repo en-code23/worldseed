@@ -1,0 +1,95 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create the release if it does not exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release view "${GITHUB_REF_NAME}" || gh release create "${GITHUB_REF_NAME}" --title "Worldseed ${GITHUB_REF_NAME}" --notes "Downloads for Mac, Windows, Linux and Android. The apps are not code-signed yet."
+
+  desktop:
+    needs: release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            args: --target universal-apple-darwin
+            file: target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            name: Worldseed-mac.dmg
+          - os: windows-latest
+            args: ""
+            file: target/release/bundle/nsis/*-setup.exe
+            name: Worldseed-windows-setup.exe
+          - os: ubuntu-22.04
+            args: ""
+            file: target/release/bundle/appimage/*.AppImage
+            name: Worldseed-linux.AppImage
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin,wasm32-unknown-unknown' || 'wasm32-unknown-unknown' }}
+      - uses: jetli/wasm-pack-action@v0.4.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Linux packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - run: npm ci
+        working-directory: web
+      - run: npm run wasm
+        working-directory: web
+      - run: npm ci
+        working-directory: desktop
+      - run: npx tauri build ${{ matrix.args }}
+        working-directory: desktop
+      - name: Upload
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          f=$(ls desktop/src-tauri/${{ matrix.file }} | head -1)
+          cp "$f" "${{ matrix.name }}"
+          gh release upload "${GITHUB_REF_NAME}" "${{ matrix.name }}" --clobber
+
+  android:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: jetli/wasm-pack-action@v0.4.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci && npm run wasm && npm run build
+        working-directory: web
+      - run: npm ci && npx cap sync android
+        working-directory: mobile
+      - run: chmod +x gradlew && ./gradlew assembleDebug
+        working-directory: mobile/android
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk Worldseed-android.apk
+          gh release upload "${GITHUB_REF_NAME}" Worldseed-android.apk --clobber
