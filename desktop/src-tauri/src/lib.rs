@@ -243,43 +243,42 @@ struct FindRequest {
     full_format: bool,
 }
 
+/// Everything the search reports while it runs.
 #[derive(Serialize, Clone)]
-struct FindTick {
-    tried: u32,
-    hits: u32,
-    attempts: u32,
-    last_ms: u64,
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum FindEvent {
+    /// one worker's live generation progress
+    Progress { worker: u32, attempt: u32, pct: f32, step: String },
+    /// a world was generated and checked
+    Tick { tried: u32, hits: u32, attempts: u32, last_ms: u64 },
+    Hit { seed: String, path: String, score: f64, met: Vec<String>, teaser: Vec<String> },
+    /// a world could not be generated or read
+    Failed { attempt: u32, message: String },
 }
 
-#[derive(Serialize, Clone)]
-struct FindHit {
-    seed: String,
-    path: String,
-    score: f64,
-    met: Vec<String>,
-    teaser: Vec<String>,
-}
-
-#[tauri::command]
-async fn find(req: FindRequest, app: AppHandle, state: State<'_, AppState>) -> Result<u32, String> {
-    let install = state.install.lock().unwrap().clone();
-    if !install.found {
-        return Err("Terraria was not found. Choose your Terraria folder first.".into());
-    }
-    let cancel = Arc::new(AtomicBool::new(false));
-    *state.cancel.lock().unwrap() = cancel.clone();
-    let goals: seedcore::finder::Goals = serde_json::from_value(req.goals.clone()).map_err(|e| e.to_string())?;
+/// The search loop, free of Tauri so it can be tested against the real server.
+fn run_find(req: FindRequest, goals: seedcore::finder::Goals, server: String, cancel: Arc<AtomicBool>, emit: Arc<dyn Fn(FindEvent) + Send + Sync>) -> Result<u32, String> {
     let next = Arc::new(AtomicU32::new(0));
     let tried = Arc::new(AtomicU32::new(0));
     let hits = Arc::new(AtomicU32::new(0));
+    let failed_in_a_row = Arc::new(AtomicU32::new(0));
+    let last_error = Arc::new(Mutex::new(String::new()));
     let run = tmp_root().join(format!("find-{}", rand_u64() % 1_000_000_000));
     let workers = req.workers.clamp(1, 8);
+    emit(FindEvent::Tick { tried: 0, hits: 0, attempts: req.attempts, last_ms: 0 });
     let mut handles = vec![];
-    for _ in 0..workers {
-        let (next, tried, hits, cancel, app, req, goals, run, server) =
-            (next.clone(), tried.clone(), hits.clone(), cancel.clone(), app.clone(), req.clone(), goals.clone(), run.clone(), install.server.clone());
+    for worker in 0..workers {
+        let (next, tried, hits, failed_in_a_row, last_error, cancel, emit, req, goals, run, server) = (
+            next.clone(), tried.clone(), hits.clone(), failed_in_a_row.clone(), last_error.clone(),
+            cancel.clone(), emit.clone(), req.clone(), goals.clone(), run.clone(), server.clone(),
+        );
         handles.push(std::thread::spawn(move || loop {
             if cancel.load(Ordering::Relaxed) || hits.load(Ordering::Relaxed) >= req.want.max(1) {
+                break;
+            }
+            // the same failure on every world (wrong version, broken install) stops the search
+            if failed_in_a_row.load(Ordering::Relaxed) >= workers.max(2) {
+                cancel.store(true, Ordering::Relaxed);
                 break;
             }
             let i = next.fetch_add(1, Ordering::Relaxed);
@@ -308,40 +307,106 @@ async fn find(req: FindRequest, app: AppHandle, state: State<'_, AppState>) -> R
             let dir = run.join(format!("try-{i}"));
             let spec = terraria::GenSpec { size: req.size, difficulty: req.difficulty, evil, name: req.name.clone(), seed: seed.clone() };
             let t0 = std::time::Instant::now();
-            let res = terraria::generate(std::path::Path::new(&server), &dir, &spec, &cancel, |_, _| {});
-            let ms = t0.elapsed().as_millis() as u64;
-            if let Ok(path) = res {
-                if let Ok(bytes) = std::fs::read(&path) {
-                    if let Ok(w) = seedcore::World::parse(&bytes) {
-                        let a = seedcore::analyze(&w);
-                        let v = seedcore::finder::judge(&a, &goals);
-                        if v.pass && hits.load(Ordering::Relaxed) < req.want.max(1) {
-                            hits.fetch_add(1, Ordering::Relaxed);
-                            // found worlds go to the library so they survive a restart
-                            let kept = keep_in_library(&path, &req.name).unwrap_or(path.clone());
-                            let _ = std::fs::remove_dir_all(&dir);
-                            let _ = app.emit("find-hit", FindHit { seed: seed.clone(), path: kept.display().to_string(), score: v.score, met: v.met, teaser: v.teaser });
-                        } else {
-                            let _ = std::fs::remove_dir_all(&dir);
-                        }
-                    }
+            let mut last_pct = -1i32;
+            let res = terraria::generate(std::path::Path::new(&server), &dir, &spec, &cancel, |pct, step| {
+                // throttle to whole percents so the UI isn't flooded
+                if pct as i32 != last_pct {
+                    last_pct = pct as i32;
+                    emit(FindEvent::Progress { worker, attempt: i + 1, pct, step: step.to_string() });
                 }
-            } else {
-                let _ = std::fs::remove_dir_all(&dir);
+            });
+            let ms = t0.elapsed().as_millis() as u64;
+            let outcome: Result<(), String> = (|| {
+                let path = res?;
+                let bytes = std::fs::read(&path).map_err(|e| format!("Could not read the new world: {e}"))?;
+                let w = seedcore::World::parse(&bytes)?;
+                let a = seedcore::analyze(&w);
+                let v = seedcore::finder::judge(&a, &goals);
+                if v.pass && hits.fetch_add(1, Ordering::Relaxed) < req.want.max(1) {
+                    // found worlds go to the library so they survive a restart
+                    let kept = keep_in_library(&path, &req.name)?;
+                    emit(FindEvent::Hit { seed: seed.clone(), path: kept.display().to_string(), score: v.score, met: v.met, teaser: v.teaser });
+                } else if v.pass {
+                    hits.fetch_sub(1, Ordering::Relaxed);
+                }
+                Ok(())
+            })();
+            let _ = std::fs::remove_dir_all(&dir);
+            match outcome {
+                Ok(()) => failed_in_a_row.store(0, Ordering::Relaxed),
+                Err(e) if e == "cancelled" => break,
+                Err(e) => {
+                    failed_in_a_row.fetch_add(1, Ordering::Relaxed);
+                    *last_error.lock().unwrap() = e.clone();
+                    emit(FindEvent::Failed { attempt: i + 1, message: e });
+                }
             }
             let t = tried.fetch_add(1, Ordering::Relaxed) + 1;
-            let _ = app.emit("find-tick", FindTick { tried: t, hits: hits.load(Ordering::Relaxed), attempts: req.attempts, last_ms: ms });
+            emit(FindEvent::Tick { tried: t, hits: hits.load(Ordering::Relaxed), attempts: req.attempts, last_ms: ms });
         }));
     }
-    let hits2 = hits.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        for h in handles {
-            let _ = h.join();
+    for h in handles {
+        let _ = h.join();
+    }
+    let _ = std::fs::remove_dir_all(&run);
+    let found = hits.load(Ordering::Relaxed).min(req.want.max(1));
+    if found == 0 && failed_in_a_row.load(Ordering::Relaxed) >= workers.max(2) {
+        return Err(format!("Terraria could not make worlds, so the search stopped. Last error: {}", last_error.lock().unwrap()));
+    }
+    Ok(found)
+}
+
+#[tauri::command]
+async fn find(req: FindRequest, app: AppHandle, state: State<'_, AppState>) -> Result<u32, String> {
+    let install = state.install.lock().unwrap().clone();
+    if !install.found {
+        return Err("Terraria was not found. Choose your Terraria folder first.".into());
+    }
+    let cancel = Arc::new(AtomicBool::new(false));
+    *state.cancel.lock().unwrap() = cancel.clone();
+    let goals: seedcore::finder::Goals = serde_json::from_value(req.goals.clone()).map_err(|e| format!("The goals could not be read: {e}"))?;
+    let emit: Arc<dyn Fn(FindEvent) + Send + Sync> = Arc::new(move |ev| {
+        let _ = app.emit("find", ev);
+    });
+    tauri::async_runtime::spawn_blocking(move || run_find(req, goals, install.server, cancel, emit))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[cfg(test)]
+mod find_tests {
+    use super::*;
+    /// Runs a real search against the local Terraria install. `cargo test -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn finds_worlds_end_to_end() {
+        let install = terraria::detect();
+        assert!(install.found);
+        let req = FindRequest {
+            size: 1, difficulty: 1, evil: 1, crimson_chance: Some(0.7), specials: vec![], secrets: vec![],
+            goals: serde_json::json!({ "sword_shrine": true, "min_rare_items": 1 }),
+            attempts: 4, workers: 2, want: 1, name: "Find Test".into(), full_format: true,
+        };
+        let goals: seedcore::finder::Goals = serde_json::from_value(req.goals.clone()).unwrap();
+        let progress = Arc::new(AtomicU32::new(0));
+        let p2 = progress.clone();
+        let emit: Arc<dyn Fn(FindEvent) + Send + Sync> = Arc::new(move |ev| match ev {
+            FindEvent::Progress { .. } => { p2.fetch_add(1, Ordering::Relaxed); }
+            other => println!("{}", serde_json::to_string(&other).unwrap()),
+        });
+        let t = std::time::Instant::now();
+        let r = run_find(req, goals, install.server, Arc::new(AtomicBool::new(false)), emit);
+        println!("result {r:?} after {:?}, {} progress events", t.elapsed(), progress.load(Ordering::Relaxed));
+        if let Ok(n) = r {
+            if n > 0 {
+                for e in std::fs::read_dir(library_dir()).unwrap().flatten() {
+                    if e.file_name().to_string_lossy().starts_with("Find_Test") {
+                        let _ = std::fs::remove_file(e.path());
+                    }
+                }
+            }
         }
-    })
-    .await
-    .map_err(|e| e.to_string())?;
-    Ok(hits2.load(Ordering::Relaxed))
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

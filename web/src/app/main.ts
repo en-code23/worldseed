@@ -684,7 +684,7 @@ const SHARED_PICKS = ["Hermes Boots", "Cloud in a Bottle", "Magic Mirror", "Ice 
 
 interface Preset { key: string; name: string; about: string; goals: Goals; suggest?: string }
 const PRESETS: Preset[] = [
-  { key: "lucky", name: "Lucky explorer", about: "A world with treasure worth finding. You learn what, never where.", goals: { items: ["Fledgling Wings"], sword_shrine: true } },
+  { key: "lucky", name: "Lucky explorer", about: "A sword shrine and at least one rare treasure. You learn what, never where.", goals: { sword_shrine: true, min_rare_items: 1 } },
   { key: "speed", name: "Speedrun", about: "Short trips: sword shrine and dungeon near spawn.", goals: { sword_shrine: true, max_sword_distance: 500, max_dungeon_distance: 1000 } },
   { key: "challenge", name: "Challenge", about: "Evil at your doorstep, the dungeon far away, no free sword.", goals: { max_evil_distance: 200, min_dungeon_distance: 1300 }, suggest: "Try it with For the Worthy and Master." },
   { key: "multi", name: "Multiplayer", about: "Enough good loot for everyone on the server.", goals: { players: 4, shared_items: ["Hermes Boots", "Cloud in a Bottle", "Magic Mirror"], min_sword_shrines: 2, min_sky_islands: 4 } },
@@ -795,6 +795,7 @@ function renderGoals() {
     chipList("Must be on a sky island", SKY_PICKS, goals.sky_items),
     el("div", { className: "row" }, checkField("Enchanted Sword shrine", "sword_shrine"), checkField("Desert pyramid", "pyramid")),
     el("div", { className: "grid2" },
+      numField("Different rare items, at least", "min_rare_items", "Fledgling Wings, Seaweed, Flower Boots and the like."),
       numField("At least this many sky islands", "min_sky_islands"),
       numField("Sword shrine within (tiles of spawn)", "max_sword_distance"),
       numField("Dungeon within (tiles)", "max_dungeon_distance"),
@@ -814,47 +815,98 @@ function renderGoals() {
   validateGoals();
 }
 
+type FindEvent =
+  | { kind: "progress"; worker: number; attempt: number; pct: number; step: string }
+  | { kind: "tick"; tried: number; hits: number; attempts: number; last_ms: number }
+  | { kind: "hit"; seed: string; path: string; score: number; met: string[]; teaser: string[] }
+  | { kind: "failed"; attempt: number; message: string };
+
 async function runFind() {
   if (!state.install?.found) return toast("Terraria was not found. Choose its folder first.");
   if (versionMismatch()) return;
   if (!validateGoals()) return;
   const go = $<HTMLButtonElement>("find-go");
   go.disabled = true;
+  go.textContent = "Finding…";
   findRunning = true;
   $("hits").replaceChildren();
   $("find-progress").hidden = false;
+  $("find-cancel").hidden = false;
   const attempts = Number($<HTMLInputElement>("attempts").value) || 40;
-  $<HTMLProgressElement>("find-bar").value = 0;
+  const workers = Math.min(8, Math.max(1, Number($<HTMLInputElement>("workers").value) || 2));
+  const bar = $<HTMLProgressElement>("find-bar");
+  bar.value = 0;
   $("find-text").textContent = "Starting Terraria's generator…";
+  // one live line per world being generated right now
+  const lines = new Map<number, HTMLElement>();
+  const box = $("find-workers");
+  box.replaceChildren();
+  for (let w = 0; w < workers; w++) {
+    const li = el("li", {}, "Waiting to start…");
+    lines.set(w, li);
+    box.append(li);
+  }
+  const started = Date.now();
+  let tried = 0;
   let found = 0;
-  const offs = [
-    await desk.on<{ tried: number; hits: number; attempts: number; last_ms: number }>("find-tick", (t) => {
-      $<HTMLProgressElement>("find-bar").value = (t.tried / t.attempts) * 100;
-      $("find-text").textContent = `${t.tried} of ${t.attempts} worlds checked, ${t.hits} match${t.hits === 1 ? "" : "es"}. About ${(t.last_ms / 1000).toFixed(0)} s per world.`;
-    }),
-    await desk.on<{ seed: string; path: string; score: number; met: string[]; teaser: string[] }>("find-hit", (h) => {
-      found++;
+  let failures = 0;
+  const live = new Map<number, number>(); // worker -> pct
+  const summary = () => {
+    const secs = Math.round((Date.now() - started) / 1000);
+    const per = tried ? (Date.now() - started) / tried : 0;
+    const left = per ? Math.max(0, Math.round((per * (attempts - tried)) / 1000 / 60)) : null;
+    const partial = [...live.values()].reduce((a, p) => a + p / 100, 0);
+    bar.value = Math.min(100, ((tried + partial) / attempts) * 100);
+    $("find-text").textContent =
+      `${tried} of ${attempts} worlds checked, ${found} match${found === 1 ? "" : "es"}` +
+      (failures ? `, ${failures} failed` : "") +
+      `. ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")} so far` +
+      (left !== null && tried < attempts ? `, about ${left} min left at most.` : ".");
+  };
+  const clock = setInterval(summary, 1000);
+  const off = await desk.on<FindEvent>("find", (e) => {
+    if (e.kind === "progress") {
+      live.set(e.worker, e.pct);
+      const li = lines.get(e.worker);
+      if (li) li.textContent = `World ${e.attempt}: ${e.step || "Generating"} (${Math.round(e.pct)}%)`;
+    } else if (e.kind === "tick") {
+      tried = e.tried;
+      found = e.hits;
+      live.clear();
+      summary();
+    } else if (e.kind === "hit") {
       libraryStale = true;
-      addHit(found, h);
-    }),
-  ];
+      addHit($("hits").children.length + 1, e);
+    } else if (e.kind === "failed") {
+      failures++;
+      toast(`World ${e.attempt} could not be made: ${e.message}`, true);
+    }
+  });
   try {
     const n = await desk.find({
       size: state.size, difficulty: state.difficulty, evil: state.evil,
       crimson_chance: state.biasOn ? state.bias / 100 : null,
       specials: [...state.specials], secrets: [...state.secrets], goals,
-      attempts, workers: Number($<HTMLInputElement>("workers").value) || 2, want: Number($<HTMLInputElement>("want").value) || 3,
+      attempts, workers, want: Number($<HTMLInputElement>("want").value) || 3,
       name: $<HTMLInputElement>("wname").value.trim() || "Lucky World", full_format: fullFormat(),
     });
-    $("find-text").textContent = n ? `Done. ${n} world${n === 1 ? "" : "s"} matched.` : "Done. Nothing matched; try fewer goals or more worlds.";
+    const secs = Math.round((Date.now() - started) / 1000);
+    bar.value = 100;
+    $("find-text").textContent =
+      `Checked ${tried} world${tried === 1 ? "" : "s"} in ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}. ` +
+      (n ? `${n} matched, and they are kept in your Library.` : "Nothing matched: try fewer goals or more worlds.");
   } catch (e) {
+    $("find-text").textContent = String(e);
     toast(String(e), true);
   } finally {
-    offs.forEach((o) => o());
+    clearInterval(clock);
+    off();
+    box.replaceChildren();
     findRunning = false;
     go.disabled = false;
+    go.textContent = "Start finding";
     $("find-cancel").hidden = true;
-    setTimeout(() => ($("find-cancel").hidden = false), 0);
+    validateGoals();
   }
 }
 

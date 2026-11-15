@@ -26,6 +26,8 @@ pub struct Goals {
     pub players: u32,
     pub shared_items: Vec<String>,
     pub min_sword_shrines: u32,
+    /// At least this many different rare items anywhere (the "lucky" goal, without naming them).
+    pub min_rare_items: u32,
 }
 
 #[derive(Serialize, Default)]
@@ -177,6 +179,13 @@ pub fn judge(a: &Analysis, g: &Goals) -> Verdict {
             let n = count_item(a, it);
             need(n >= g.players, format!("{it} for each of {} players ({n} found)", g.players), &mut v, 5.0);
         }
+    }
+    if g.min_rare_items > 0 {
+        let mut kinds: Vec<&str> = a.loot.iter().filter(|l| l.tier == 2).map(|l| l.item.as_str()).collect();
+        kinds.sort();
+        kinds.dedup();
+        let n = kinds.len() as u32;
+        need(n >= g.min_rare_items, format!("At least {} rare item{} hidden somewhere", g.min_rare_items, if g.min_rare_items == 1 { "" } else { "s" }), &mut v, 6.0);
     }
     for it in &g.bonus_items {
         if has_item(a, it, None) {

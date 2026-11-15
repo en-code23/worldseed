@@ -23,5 +23,5 @@ export interface Goals {
   items?: string[]; sky_items?: string[]; bonus_items?: string[]; sword_shrine?: boolean; pyramid?: boolean;
   min_sky_islands?: number; min_living_trees?: number; max_dungeon_distance?: number; min_dungeon_distance?: number;
   max_evil_distance?: number; min_evil_distance?: number; max_sword_distance?: number; players?: number;
-  shared_items?: string[]; min_sword_shrines?: number;
+  shared_items?: string[]; min_sword_shrines?: number; min_rare_items?: number;
 }
