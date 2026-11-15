@@ -32,7 +32,30 @@
   <main>
     <!-- MAP -->
     <section class="panel map-panel" id="panel-map" role="tabpanel" aria-labelledby="tab-map">
-      <aside class="side" id="map-side">
+      <div class="stage" id="stage">
+        <canvas id="map" aria-label="World map" aria-describedby="map-keys" role="application" aria-roledescription="map"></canvas>
+        <p class="visually-hidden" id="map-keys">Arrow keys move, plus and minus zoom, 0 fits the world, Enter opens the marker nearest the centre, Escape closes it.</p>
+        <div class="drop" id="drop" hidden><p>Drop the world file to open it</p></div>
+        <div class="map-empty" id="map-empty">
+          <p class="big">No world open yet.</p>
+          <p>Make one in Create, or open a <code>.wld</code> file.</p>
+        </div>
+        <div class="shielded" id="shielded" hidden>
+          <h2>The map is hidden</h2>
+          <ul id="teaser"></ul>
+          <button class="btn btn--secondary" id="unshield">Show the map</button>
+          <p class="note">Showing it reveals where everything is.</p>
+        </div>
+        <div class="tip" id="tip" hidden></div>
+        <div class="zoom" id="zoom">
+          <button class="icon-btn" id="zoom-in" aria-label="Zoom in"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>
+          <button class="icon-btn" id="zoom-out" aria-label="Zoom out"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10"/></svg></button>
+          <button class="icon-btn" id="zoom-fit" aria-label="Fit the whole world"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>
+        </div>
+        <section class="detail" id="detail" aria-label="Selected marker" hidden></section>
+        <div class="loading" id="loading" hidden><p id="loading-text">Reading the world…</p><progress id="loading-bar" aria-label="Loading the world"></progress></div>
+      </div>
+      <aside class="side" id="map-side" aria-label="World details">
         <div class="empty-side" id="empty-side">
           <h2>Open a world</h2>
           <p>Drop a <code>.wld</code> file anywhere, or pick one. The map shows every structure, shrine, orb and chest, with each chest's loot.</p>
@@ -44,55 +67,36 @@
         </div>
         <div id="world-side" hidden>
           <div class="world-head">
-            <h2 id="w-name">World</h2>
+            <h1 id="w-name">World</h1>
             <p class="seed-line"><span class="label">Seed</span> <code id="w-seed"></code></p>
             <dl class="facts" id="w-facts"></dl>
           </div>
 
           <div class="shield">
             <label class="switch"><input type="checkbox" id="shield"><span>Spoiler shield</span></label>
-            <p class="note">Hide the map and show only what the world holds, not where.</p>
+            <p class="note">Shows what the world holds, never where. Worldseed remembers your choice.</p>
           </div>
 
-          <details class="block" id="layers-block" open>
-            <summary>Markers</summary>
-            <div class="layers" id="layers"></div>
-          </details>
+          <div class="side-tabs" role="tablist" aria-label="World details">
+            <button role="tab" id="st-loot" aria-controls="sp-loot" aria-selected="true">Loot</button>
+            <button role="tab" id="st-markers" aria-controls="sp-markers" aria-selected="false" tabindex="-1">Markers</button>
+            <button role="tab" id="st-hints" aria-controls="sp-hints" aria-selected="false" tabindex="-1">Hints</button>
+          </div>
 
-          <details class="block" id="loot-block" open>
-            <summary>Notable loot</summary>
+          <div class="side-panel" id="sp-loot" role="tabpanel" aria-labelledby="st-loot">
             <input class="search" type="search" id="loot-search" placeholder="Search any item, e.g. Hermes Boots" aria-label="Search loot">
             <ol class="loot" id="loot"></ol>
-          </details>
-
-          <details class="block" id="hint-block">
-            <summary>Hints, if you want them</summary>
+          </div>
+          <div class="side-panel" id="sp-markers" role="tabpanel" aria-labelledby="st-markers" hidden>
+            <div class="row tight"><button class="link" id="layers-all">Show all</button><button class="link" id="layers-none">Hide all</button></div>
+            <div class="layers" id="layers"></div>
+          </div>
+          <div class="side-panel" id="sp-hints" role="tabpanel" aria-labelledby="st-hints" hidden>
             <p class="note">Each hint opens one step at a time, from vague to exact.</p>
             <ol class="hints" id="hints"></ol>
-          </details>
+          </div>
         </div>
       </aside>
-      <div class="stage" id="stage">
-        <canvas id="map" aria-label="World map" role="img"></canvas>
-        <div class="drop" id="drop" hidden><p>Drop the world file to open it</p></div>
-        <div class="map-empty" id="map-empty">
-          <p class="big">No world open yet.</p>
-          <p>Make one in Create, or open a <code>.wld</code> file.</p>
-        </div>
-        <div class="shielded" id="shielded" hidden>
-          <h2>The map is hidden</h2>
-          <ul id="teaser"></ul>
-          <button class="btn btn--secondary" id="unshield">Show the map anyway</button>
-        </div>
-        <div class="tip" id="tip" hidden></div>
-        <div class="zoom">
-          <button class="icon-btn" id="zoom-in" aria-label="Zoom in">+</button>
-          <button class="icon-btn" id="zoom-out" aria-label="Zoom out">−</button>
-          <button class="icon-btn" id="zoom-fit" aria-label="Fit the whole world">Fit</button>
-        </div>
-        <div class="detail" id="detail" hidden></div>
-        <div class="loading" id="loading" hidden><p id="loading-text">Reading the world…</p><progress id="loading-bar" max="100"></progress></div>
-      </div>
     </section>
 
     <!-- CREATE -->
@@ -101,6 +105,7 @@
         <div class="form-main">
           <h1>Create a world</h1>
           <p class="lead">Set it up like the game's world menu. The seed below works in Terraria too: paste it into the seed field.</p>
+          <label class="field version-inline"><span>Terraria version</span><select id="version2"></select></label>
 
           <div class="grid2">
             <fieldset><legend>Size</legend><div class="seg" id="size"></div></fieldset>
@@ -118,7 +123,7 @@
                 <span>Crimson</span>
                 <output id="bias-out">70% Crimson</output>
               </div>
-              <p class="note">The evil is drawn when the world is made, so it still feels like luck.</p>
+              <p class="note">The dice roll only when you copy the seed or generate the world, so the evil stays a surprise until you play.</p>
             </div>
           </fieldset>
 
@@ -143,7 +148,7 @@
         <aside class="form-side">
           <div class="out">
             <p class="label">Seed for Terraria</p>
-            <code class="seed-out" id="seed-out"></code>
+            <code class="seed-out" id="seed-out" aria-live="polite"></code>
             <p class="note" id="seed-howto"></p>
             <button class="btn btn--secondary" id="copy-seed">Copy seed</button>
           </div>
@@ -151,7 +156,7 @@
             <button class="btn btn--primary" id="gen-preview">Generate and open map</button>
             <button class="btn btn--secondary" id="gen-install">Generate straight into Terraria</button>
             <p class="note">Straight into Terraria keeps the map hidden. The world appears in your world list.</p>
-            <div class="progress" id="gen-progress" hidden><progress id="gen-bar" max="100"></progress><p id="gen-step"></p><button class="link" id="gen-cancel">Cancel</button></div>
+            <div class="progress" id="gen-progress" hidden><progress id="gen-bar" max="100" aria-label="Generating the world"></progress><p id="gen-step" aria-live="polite"></p><button class="link" id="gen-cancel">Cancel</button></div>
           </div>
           <div class="web-only">
             <p class="note">Generating worlds needs the desktop app, which runs your own copy of Terraria's generator. On the web, make the world in Terraria with this seed, then open its file on the Map tab.</p>
@@ -166,10 +171,11 @@
       <div class="form-wrap">
         <div class="form-main">
           <h1>Find a lucky world</h1>
-          <p class="lead">Worldseed makes worlds with the real generator and keeps the ones that match. You see what you got, never where.</p>
+          <p class="lead desktop-only">Worldseed makes worlds with your Terraria's own generator and keeps the ones that match. You see what you got, never where.</p>
+          <p class="lead web-only">Pick what a good world must have, then check any world you made against it. You see what it holds, never where.</p>
           <div class="presets" id="presets"></div>
           <div id="goal-editor"></div>
-          <p class="note">Size, difficulty, evil and seeds come from the Create tab.</p>
+          
         </div>
         <aside class="form-side">
           <div class="desktop-only">
@@ -178,13 +184,18 @@
               <label class="field"><span>At the same time</span><input type="number" id="workers" min="1" max="8" value="2"></label>
             </div>
             <label class="field"><span>Stop after this many matches</span><input type="number" id="want" min="1" max="20" value="3"></label>
+            <p class="settings-echo" id="find-echo"></p>
             <button class="btn btn--primary" id="find-go">Start finding</button>
-            <div class="progress" id="find-progress" hidden><progress id="find-bar" max="100"></progress><p id="find-text"></p><button class="link" id="find-cancel">Stop</button></div>
+            <p class="field-error" id="find-blocked" hidden>Two goals contradict each other. The details are under the goals.</p>
+            <div class="progress" id="find-progress" hidden><progress id="find-bar" max="100" aria-label="Finding worlds"></progress><p id="find-text" aria-live="polite"></p><button class="link" id="find-cancel">Stop</button></div>
             <ol class="hits" id="hits"></ol>
           </div>
-          <div class="web-only">
-            <p class="note">Finding needs the desktop app. You can still check a world you made yourself: open it on the Map tab with the spoiler shield on.</p>
-            <a class="btn btn--secondary" href="../index.html#download">Get the desktop app</a>
+          <div class="web-only check">
+            <h2>Check a world you made</h2>
+            <p class="note">Open a world file. Worldseed tests it against these goals and tells you what it holds, never where.</p>
+            <label class="btn btn--primary file-btn">Check a world file<input type="file" id="check-file" accept=".wld" class="visually-hidden"></label>
+            <div class="verdict" id="verdict" aria-live="polite" hidden></div>
+            <p class="note">Generating and searching many worlds needs the <a href="../index.html#download">desktop app</a>.</p>
           </div>
         </aside>
       </div>

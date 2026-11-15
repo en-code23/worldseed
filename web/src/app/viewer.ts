@@ -39,6 +39,9 @@ export class MapView {
   onHover: (wx: number, wy: number, poi: Poi | null, px: number, py: number) => void = () => {};
   onLeave: () => void = () => {};
   onPick: (poi: Poi | null) => void = () => {};
+  onEscape: () => void = () => {};
+  private focusX = 0;
+  private focusY = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d")!;
@@ -65,9 +68,11 @@ export class MapView {
     return this.W > 0;
   }
 
-  setWorld(rgba: Uint8Array, w: number, h: number, pois: Poi[]) {
+  setWorld(rgba: Uint8Array, w: number, h: number, pois: Poi[], focusX = w / 2, focusY = h / 3) {
     this.W = w;
     this.H = h;
+    this.focusX = focusX;
+    this.focusY = focusY;
     this.pois = pois;
     this.chunks = [];
     for (let x0 = 0; x0 < w; x0 += CHUNK) {
@@ -116,10 +121,15 @@ export class MapView {
     return this.canvas.height / this.dpr;
   }
 
+  /** Whole world on wide screens; on narrow ones, fill the height and centre on spawn so the map is never a thin strip. */
   fit() {
     if (!this.W) return;
-    this.scale = Math.min(this.cw / this.W, this.ch / this.H);
-    this.ox = -(this.cw / this.scale - this.W) / 2;
+    const whole = Math.min(this.cw / this.W, this.ch / this.H);
+    const narrow = this.cw < 720 && this.ch / this.H > whole * 1.6;
+    this.scale = narrow ? this.ch / this.H : whole;
+    this.ox = narrow
+      ? Math.min(Math.max(this.focusX - this.cw / this.scale / 2, 0), this.W - this.cw / this.scale)
+      : -(this.cw / this.scale - this.W) / 2;
     this.oy = -(this.ch / this.scale - this.H) / 2;
     this.scaleSet = false;
     this.draw();
@@ -161,6 +171,7 @@ export class MapView {
       ArrowLeft: () => (this.ox -= step), ArrowRight: () => (this.ox += step),
       ArrowUp: () => (this.oy -= step), ArrowDown: () => (this.oy += step),
       "+": () => this.zoomAt(1.4), "=": () => this.zoomAt(1.4), "-": () => this.zoomAt(1 / 1.4), "0": () => this.fit(),
+      Enter: () => this.pickNearestCentre(), " ": () => this.pickNearestCentre(), Escape: () => this.onEscape(),
     };
     const fn = map[e.key];
     if (fn) {
@@ -230,6 +241,28 @@ export class MapView {
       this.draw();
     }
     this.dragStart = null;
+  }
+
+  /** Keyboard picking: the visible marker closest to the middle of the view. */
+  private pickNearestCentre() {
+    if (!this.W) return;
+    const cx = this.ox + this.cw / 2 / this.scale;
+    const cy = this.oy + this.ch / 2 / this.scale;
+    let best: Poi | null = null;
+    let bd = Infinity;
+    for (const p of this.pois) {
+      if (!this.shown(p) || this.scale < this.minZoomFor(p)) continue;
+      const d = Math.hypot(p.x - cx, p.y - cy);
+      if (d < bd) {
+        bd = d;
+        best = p;
+      }
+    }
+    if (!best) return;
+    this.selected = best;
+    this.ox = best.x - this.cw / 2 / this.scale;
+    this.oy = best.y - this.ch / 2 / this.scale;
+    this.onPick(best);
   }
 
   private shown(p: Poi): boolean {
