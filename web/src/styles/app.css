@@ -115,7 +115,7 @@ main { min-height: 0; }
 .side-panel { display: grid; gap: var(--space-sm); align-content: start; }
 .row.tight { gap: var(--space-md); }
 .layer--wide { grid-column: 1 / -1; }
-.is-shielded .where, .is-shielded .zoom, .is-shielded .tip { display: none !important; }
+body:not(.has-world) .zoom, .is-shielded .where, .is-shielded .zoom, .is-shielded .tip { display: none !important; }
 .is-shielded #map { pointer-events: none; }
 .loot button { all: unset; box-sizing: border-box; display: grid; grid-template-columns: 1fr auto; gap: 0 var(--space-sm); width: 100%; padding: var(--space-xs) 0; cursor: pointer; }
 .loot button:hover .it { color: var(--color-accent); }

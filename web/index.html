@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Prata&family=Manrope:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="src/styles/site.css">
-  <script>if (window.Capacitor) location.replace("app/index.html");</script>
+  <script>/* inside the desktop or mobile app, the landing page is never shown */ if (window.Capacitor || window.__TAURI_INTERNALS__) location.replace("app/index.html");</script>
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>

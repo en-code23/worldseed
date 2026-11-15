@@ -15,6 +15,8 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLEl
 };
 
 if (desk.isDesktop) document.body.classList.add("is-desktop");
+// in the installed apps the wordmark stays in the app instead of opening the website
+if (desk.isDesktop || "Capacitor" in window) document.querySelector(".wordmark")?.removeAttribute("href");
 
 /* ---------- versions ---------- */
 const VERSIONS = ["1.4.5.8", "1.4.5.6", "1.4.5.0", "1.4.4.9", "1.4.3.6", "1.4.2.3", "1.4.1.2", "1.4.0.5"];
@@ -142,6 +144,7 @@ async function openBytes(bytes: Uint8Array, path: string | null = null, shield?:
     $<HTMLInputElement>("shield").checked = shield ?? shieldPref();
     applyShield();
     $("map-empty").hidden = true;
+    document.body.classList.add("has-world");
     showTab("tab-map");
   } catch (e) {
     toast(`That file could not be opened. ${String((e as Error)?.message ?? e)}`, true);
