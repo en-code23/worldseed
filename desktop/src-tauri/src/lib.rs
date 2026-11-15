@@ -114,9 +114,11 @@ fn scan(dir: &std::path::Path, source: &'static str, out: &mut Vec<LibEntry>) {
         let mut buf = Vec::new();
         let read = std::fs::File::open(&p).and_then(|f| f.take(512 * 1024).read_to_end(&mut buf));
         let (header, error) = match read {
-            Ok(_) => match seedcore::World::parse_header(&buf) {
-                Ok(h) => (Some(h), None),
-                Err(e) => (None, Some(e)),
+            // a damaged file becomes an error row, never a crash of the whole list
+            Ok(_) => match std::panic::catch_unwind(|| seedcore::World::parse_header(&buf)) {
+                Ok(Ok(h)) => (Some(h), None),
+                Ok(Err(e)) => (None, Some(e)),
+                Err(_) => (None, Some("World file is damaged.".into())),
             },
             Err(e) => (None, Some(e.to_string())),
         };

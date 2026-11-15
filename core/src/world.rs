@@ -185,12 +185,23 @@ impl World {
             return Err("This file is not a world (maybe a player or map file).".into());
         }
         r.skip(4 + 8)?; // revision, flags
-        let nsec = r.i16()? as usize;
-        let mut sec = Vec::with_capacity(nsec);
-        for _ in 0..nsec {
-            sec.push(r.i32()? as usize);
+        let nsec = r.i16()?;
+        if !(3..=64).contains(&nsec) {
+            return Err("World file is damaged (bad section count).".into());
         }
-        let nbits = r.i16()? as usize;
+        let mut sec = Vec::with_capacity(nsec as usize);
+        for _ in 0..nsec {
+            let off = r.i32()?;
+            if off < 0 || sec.last().map(|&p| (off as usize) < p).unwrap_or(false) {
+                return Err("World file is damaged (bad section offsets).".into());
+            }
+            sec.push(off as usize);
+        }
+        let nbits = r.i16()?;
+        if !(0..=8192).contains(&nbits) {
+            return Err("World file is damaged (bad tile table).".into());
+        }
+        let nbits = nbits as usize;
         let mut frame_imp = vec![false; nbits];
         let mut byte = 0u8;
         let mut mask = 128u8;
@@ -253,7 +264,8 @@ impl World {
         r.skip(1 + 1 + 1 + 4)?; // orb smashed, meteor, orb count, altar count
         h.hardmode = r.bool()?;
         // game version string lives in the generation manifest at the end of the header
-        if let Some(i) = find(&d[sec[0]..sec[1].min(d.len())], b"\"Version\":\"") {
+        let (hs, he) = (sec[0].min(d.len()), sec[1].min(d.len()));
+        if let Some(i) = find(&d[hs..he.max(hs)], b"\"Version\":\"") {
             let s = sec[0] + i + 11;
             let e = d[s..].iter().position(|&c| c == b'"').map(|p| s + p).unwrap_or(s);
             h.game_version = String::from_utf8_lossy(&d[s..e]).into_owned();
@@ -352,7 +364,11 @@ impl World {
 
         // --- chests ---
         r.pos = sec[2];
-        let total = r.i16()? as usize;
+        let total = r.i16()?;
+        if total < 0 {
+            return Err("World file is damaged (bad chest count).".into());
+        }
+        let total = total as usize;
         let mut max_items = 40usize;
         if version < 294 {
             max_items = r.i16()? as usize;
