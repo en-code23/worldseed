@@ -18,6 +18,7 @@
     <a class="wordmark" href="../index.html">Worldseed</a>
     <nav class="tabs" role="tablist" aria-label="Sections">
       <button role="tab" id="tab-map" aria-controls="panel-map" aria-selected="true">Map</button>
+      <button role="tab" id="tab-library" aria-controls="panel-library" aria-selected="false" tabindex="-1">Library</button>
       <button role="tab" id="tab-create" aria-controls="panel-create" aria-selected="false" tabindex="-1">Create</button>
       <button role="tab" id="tab-find" aria-controls="panel-find" aria-selected="false" tabindex="-1">Find</button>
       <button role="tab" id="tab-seeds" aria-controls="panel-seeds" aria-selected="false" tabindex="-1">Seeds</button>
@@ -98,6 +99,28 @@
           </div>
         </div>
       </aside>
+    </section>
+
+    <!-- LIBRARY -->
+    <section class="panel form-panel" id="panel-library" role="tabpanel" aria-labelledby="tab-library" hidden>
+      <div class="catalog library">
+        <div class="lib-head">
+          <h1>Your worlds</h1>
+          <p class="lead desktop-only">Every world in your Terraria folder, and every world Worldseed made for you. Open any map without making it again.</p>
+          <p class="lead web-only">Worlds you opened here are remembered in this browser, up to twelve. Open any map again in one click.</p>
+        </div>
+        <div class="lib-tools">
+          <input class="search" type="search" id="lib-search" placeholder="Search by name or seed" aria-label="Search your worlds">
+          <div class="seg desktop-only" id="lib-filter" role="group" aria-label="Show">
+            <button type="button" data-f="all" aria-pressed="true">All</button>
+            <button type="button" data-f="terraria" aria-pressed="false" class="desktop-only">In Terraria</button>
+            <button type="button" data-f="worldseed" aria-pressed="false" class="desktop-only">Kept by Worldseed</button>
+          </div>
+          <button class="btn btn--secondary desktop-only" id="lib-refresh">Refresh</button>
+        </div>
+        <ol class="lib" id="lib" aria-live="polite"></ol>
+        <p class="note" id="lib-where"></p>
+      </div>
     </section>
 
     <!-- CREATE -->

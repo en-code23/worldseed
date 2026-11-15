@@ -53,6 +53,105 @@ fn set_install(path: String, state: State<AppState>) -> terraria::Install {
     i
 }
 
+/// Per-user folder where Worldseed keeps worlds it made that are not in Terraria yet.
+fn library_dir() -> PathBuf {
+    let base = if cfg!(target_os = "windows") {
+        std::env::var_os("APPDATA").map(PathBuf::from)
+    } else if cfg!(target_os = "macos") {
+        std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Library/Application Support"))
+    } else {
+        std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
+    };
+    base.unwrap_or_else(std::env::temp_dir).join("app.worldseed").join("library")
+}
+
+/// Moves a freshly generated world into the library under a name that is free.
+fn keep_in_library(src: &std::path::Path, name: &str) -> Result<PathBuf, String> {
+    let dir = library_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let clean: String = name.chars().map(|c| if c.is_alphanumeric() || c == '-' { c } else { '_' }).collect();
+    let clean = if clean.is_empty() { "World".to_string() } else { clean };
+    let mut dest = dir.join(format!("{clean}.wld"));
+    let mut n = 2;
+    while dest.exists() {
+        dest = dir.join(format!("{clean}_{n}.wld"));
+        n += 1;
+    }
+    if std::fs::rename(src, &dest).is_err() {
+        std::fs::copy(src, &dest).map_err(|e| e.to_string())?;
+    }
+    Ok(dest)
+}
+
+fn inside_known_folders(p: &std::path::Path) -> bool {
+    p.starts_with(tmp_root()) || p.starts_with(terraria::worlds_dir()) || p.starts_with(library_dir())
+}
+
+#[derive(Serialize)]
+struct LibEntry {
+    path: String,
+    /// "terraria" (in the Worlds folder) or "worldseed" (kept by Worldseed)
+    source: &'static str,
+    modified: u64,
+    bytes: u64,
+    header: Option<seedcore::world::Header>,
+    error: Option<String>,
+}
+
+fn scan(dir: &std::path::Path, source: &'static str, out: &mut Vec<LibEntry>) {
+    use std::io::Read;
+    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    for e in rd.flatten() {
+        let p = e.path();
+        if p.extension().map(|x| x != "wld").unwrap_or(true) {
+            continue;
+        }
+        let meta = e.metadata().ok();
+        let modified = meta.as_ref().and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+        // the header section sits at the start of the file; 512 KB covers it many times over
+        let mut buf = Vec::new();
+        let read = std::fs::File::open(&p).and_then(|f| f.take(512 * 1024).read_to_end(&mut buf));
+        let (header, error) = match read {
+            Ok(_) => match seedcore::World::parse_header(&buf) {
+                Ok(h) => (Some(h), None),
+                Err(e) => (None, Some(e)),
+            },
+            Err(e) => (None, Some(e.to_string())),
+        };
+        out.push(LibEntry { path: p.display().to_string(), source, modified, bytes: meta.map(|m| m.len()).unwrap_or(0), header, error });
+    }
+}
+
+#[tauri::command]
+async fn list_worlds() -> Vec<LibEntry> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let mut out = vec![];
+        scan(&terraria::worlds_dir(), "terraria", &mut out);
+        scan(&library_dir(), "worldseed", &mut out);
+        out.sort_by(|a, b| b.modified.cmp(&a.modified));
+        out
+    })
+    .await
+    .unwrap_or_default()
+}
+
+/// Removes a world Worldseed kept. Worlds in Terraria's own folder are never deleted from here.
+#[tauri::command]
+fn remove_world(path: String) -> Result<(), String> {
+    let p = PathBuf::from(&path);
+    if !p.starts_with(library_dir()) || p.extension().map(|x| x != "wld").unwrap_or(true) {
+        return Err("Worldseed only removes worlds it keeps itself. Delete Terraria worlds in Terraria.".into());
+    }
+    std::fs::remove_file(&p).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn library_path() -> String {
+    library_dir().display().to_string()
+}
+
 #[derive(Deserialize)]
 struct GenRequest {
     size: u8,
@@ -61,6 +160,9 @@ struct GenRequest {
     name: String,
     seed: String,
     job: String,
+    /// keep a copy in the library (true for "generate and open map")
+    #[serde(default)]
+    keep: bool,
 }
 
 #[derive(Serialize, Clone)]
@@ -81,6 +183,8 @@ async fn generate(req: GenRequest, app: AppHandle, state: State<'_, AppState>) -
     let dir = tmp_root().join(format!("gen-{}", rand_u64() % 1_000_000_000));
     let spec = terraria::GenSpec { size: req.size, difficulty: req.difficulty, evil: req.evil, name: req.name, seed: req.seed };
     let job = req.job.clone();
+    let keep = req.keep;
+    let keep_name = spec.name.clone();
     let res = tauri::async_runtime::spawn_blocking(move || {
         terraria::generate(std::path::Path::new(&install.server), &dir, &spec, &cancel, |pct, step| {
             let _ = app.emit("gen-progress", Progress { job: job.clone(), pct, step: step.to_string() });
@@ -88,13 +192,16 @@ async fn generate(req: GenRequest, app: AppHandle, state: State<'_, AppState>) -
     })
     .await
     .map_err(|e| e.to_string())??;
+    if keep {
+        return keep_in_library(&res, &keep_name).map(|p| p.display().to_string());
+    }
     Ok(res.display().to_string())
 }
 
 #[tauri::command]
 fn read_world(path: String) -> Result<tauri::ipc::Response, String> {
     let p = PathBuf::from(&path);
-    if !p.starts_with(tmp_root()) && !p.starts_with(terraria::worlds_dir()) {
+    if !inside_known_folders(&p) {
         return Err("Refusing to read a file outside Worldseed's folders".into());
     }
     std::fs::read(&p).map(tauri::ipc::Response::new).map_err(|e| e.to_string())
@@ -208,7 +315,10 @@ async fn find(req: FindRequest, app: AppHandle, state: State<'_, AppState>) -> R
                         let v = seedcore::finder::judge(&a, &goals);
                         if v.pass && hits.load(Ordering::Relaxed) < req.want.max(1) {
                             hits.fetch_add(1, Ordering::Relaxed);
-                            let _ = app.emit("find-hit", FindHit { seed: seed.clone(), path: path.display().to_string(), score: v.score, met: v.met, teaser: v.teaser });
+                            // found worlds go to the library so they survive a restart
+                            let kept = keep_in_library(&path, &req.name).unwrap_or(path.clone());
+                            let _ = std::fs::remove_dir_all(&dir);
+                            let _ = app.emit("find-hit", FindHit { seed: seed.clone(), path: kept.display().to_string(), score: v.score, met: v.met, teaser: v.teaser });
                         } else {
                             let _ = std::fs::remove_dir_all(&dir);
                         }
@@ -245,7 +355,8 @@ pub fn run() {
             let _ = app.get_webview_window("main");
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![detect, set_install, generate, read_world, install_world, worlds_dir, cancel, find])
+        .invoke_handler(tauri::generate_handler![detect, set_install, generate, read_world, install_world, worlds_dir, cancel, find, list_worlds, remove_world, library_path])
         .run(tauri::generate_context!())
         .expect("error while running Worldseed");
 }
+

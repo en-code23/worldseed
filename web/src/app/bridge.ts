@@ -20,7 +20,7 @@ export async function pickFolder(): Promise<string | null> {
   const r = await d.open({ directory: true, title: "Choose your Terraria folder" });
   return typeof r === "string" ? r : null;
 }
-export async function generate(req: { size: number; difficulty: number; evil: number; name: string; seed: string; job: string }): Promise<string> {
+export async function generate(req: { size: number; difficulty: number; evil: number; name: string; seed: string; job: string; keep?: boolean }): Promise<string> {
   return (await tauri()).invoke<string>("generate", { req });
 }
 export async function readWorld(path: string): Promise<Uint8Array> {
@@ -29,6 +29,24 @@ export async function readWorld(path: string): Promise<Uint8Array> {
 }
 export async function installWorld(path: string, name: string): Promise<string> {
   return (await tauri()).invoke<string>("install_world", { path, name });
+}
+export interface LibEntry {
+  path: string;
+  source: "terraria" | "worldseed";
+  modified: number;
+  bytes: number;
+  header: import("./types").Header | null;
+  error: string | null;
+}
+export async function listWorlds(): Promise<LibEntry[]> {
+  return (await tauri()).invoke<LibEntry[]>("list_worlds");
+}
+export async function removeWorld(path: string): Promise<void> {
+  return (await tauri()).invoke("remove_world", { path });
+}
+export async function revealPath(p: string) {
+  const o = await import("@tauri-apps/plugin-opener");
+  return o.revealItemInDir(p);
 }
 export async function cancel() {
   return (await tauri()).invoke("cancel");

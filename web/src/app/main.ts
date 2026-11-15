@@ -1,4 +1,5 @@
 import { loadCore, WorldHandle, build_seed, seed_catalog } from "./core";
+import { listWeb, loadWeb, removeWeb, saveWeb } from "./library";
 import * as desk from "./bridge";
 import { MapView, kindColorVar } from "./viewer";
 import type { Analysis, Goals, Hint, Install, Poi, Secret, Special } from "./types";
@@ -70,6 +71,7 @@ function showTab(id: string) {
   }
   if (id === "tab-map") view.draw();
   if (id === "tab-find") echoSettings();
+  if (id === "tab-library") renderLibrary();
 }
 tabs.forEach((t, i) => {
   t.addEventListener("click", () => showTab(t.id));
@@ -127,7 +129,7 @@ function saveShieldPref(on: boolean) {
   }
 }
 
-async function openBytes(bytes: Uint8Array, path: string | null = null, shield?: boolean) {
+async function openBytes(bytes: Uint8Array, path: string | null = null, shield?: boolean, remember = true) {
   $("loading").hidden = false;
   $("loading-text").textContent = "Reading the world…";
   await new Promise((r) => setTimeout(r, 30));
@@ -145,6 +147,13 @@ async function openBytes(bytes: Uint8Array, path: string | null = null, shield?:
     applyShield();
     $("map-empty").hidden = true;
     document.body.classList.add("has-world");
+    // the web and phone apps remember opened worlds in the browser; the desktop library reads folders
+    if (remember && !desk.isDesktop && !path?.startsWith("sample:")) {
+      saveWeb(bytes, analysis.header).then((ok) => {
+        libraryStale = true;
+        if (!ok) console.info("Worldseed: this browser would not store the world for the library");
+      });
+    }
     showTab("tab-map");
   } catch (e) {
     toast(`That file could not be opened. ${String((e as Error)?.message ?? e)}`, true);
@@ -435,7 +444,7 @@ $("sample").addEventListener("click", async () => {
   try {
     const r = await fetch(new URL("../samples/sample-medium.wld", location.href));
     if (!r.ok) throw new Error("The sample world could not be loaded.");
-    await openBytes(new Uint8Array(await r.arrayBuffer()));
+    await openBytes(new Uint8Array(await r.arrayBuffer()), "sample:medium");
   } catch (e) {
     toast(String((e as Error).message ?? e));
     $("loading").hidden = true;
@@ -644,7 +653,8 @@ async function genOnce(install: boolean) {
     $("gen-step").textContent = `${p.step} (${p.pct.toFixed(0)}%)`;
   });
   try {
-    const path = await desk.generate({ size: state.size, difficulty: state.difficulty, evil: effectiveEvil(), name, seed: seedFor(seedInput.value.trim()), job: "one" });
+    const path = await desk.generate({ size: state.size, difficulty: state.difficulty, evil: effectiveEvil(), name, seed: seedFor(seedInput.value.trim()), job: "one", keep: !install });
+    libraryStale = true;
     if (install) {
       const dest = await desk.installWorld(path, name);
       toast(`Saved to your Terraria worlds: ${dest.split(/[\\/]/).pop()}`);
@@ -824,6 +834,7 @@ async function runFind() {
     }),
     await desk.on<{ seed: string; path: string; score: number; met: string[]; teaser: string[] }>("find-hit", (h) => {
       found++;
+      libraryStale = true;
       addHit(found, h);
     }),
   ];
@@ -931,6 +942,141 @@ function renderCatalog() {
   fill("cat-secrets", state.catalog.secrets);
 }
 
+/* ---------- library ---------- */
+let libraryStale = true;
+let libFilter = "all";
+interface LibRow {
+  key: string;
+  header: import("./types").Header | null;
+  error?: string | null;
+  source: "terraria" | "worldseed" | "browser";
+  when: number; // ms
+  size: number;
+  path?: string;
+}
+let libRows: LibRow[] = [];
+
+const sizeName = (w: number) => (w <= 4200 ? "Small" : w <= 6400 ? "Medium" : "Large");
+const dateFmt = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+async function loadLibrary() {
+  if (desk.isDesktop) {
+    const list = await desk.listWorlds();
+    libRows = list.map((e) => ({ key: e.path, header: e.header, error: e.error, source: e.source, when: e.modified * 1000, size: e.bytes, path: e.path }));
+  } else {
+    const list = await listWeb();
+    libRows = list.map((e) => ({ key: e.id, header: e.header, source: "browser", when: e.added, size: e.bytes }));
+  }
+  libraryStale = false;
+}
+
+async function openLibRow(r: LibRow) {
+  $("loading").hidden = false;
+  try {
+    const bytes = r.path ? await desk.readWorld(r.path) : await loadWeb(r.key);
+    if (!bytes) throw new Error("This world is no longer stored in the browser.");
+    await openBytes(bytes, r.path ?? null, undefined, false);
+  } catch (e) {
+    $("loading").hidden = true;
+    toast(`Could not open that world. ${String((e as Error)?.message ?? e)}`, true);
+  }
+}
+
+async function renderLibrary(force = false) {
+  const ol = $("lib");
+  if (libraryStale || force) {
+    ol.replaceChildren(el("li", {}, el("p", { className: "note" }, "Looking for worlds…")));
+    try {
+      await loadLibrary();
+    } catch (e) {
+      ol.replaceChildren(el("li", {}, el("p", { className: "field-error" }, `Could not read your worlds. ${String(e)}`)));
+      return;
+    }
+  }
+  $("lib-where").textContent = desk.isDesktop && state.install
+    ? `Terraria keeps worlds in ${state.install.worlds_dir}. Worldseed keeps the rest in its own folder.`
+    : "";
+  const q = $<HTMLInputElement>("lib-search").value.trim().toLowerCase();
+  const rows = libRows.filter((r) => (libFilter === "all" || r.source === libFilter) &&
+    (!q || (r.header?.name ?? r.key).toLowerCase().includes(q) || (r.header?.seed ?? "").toLowerCase().includes(q)));
+  if (!rows.length) {
+    const msg = libRows.length
+      ? "No world matches that search."
+      : desk.isDesktop
+        ? "No worlds yet. Make one in Create, or play Terraria: its worlds show up here."
+        : "No worlds yet. Open a world file on the Map tab and it will be kept here.";
+    ol.replaceChildren(el("li", { className: "lib-empty" }, el("p", {}, msg)));
+    return;
+  }
+  ol.replaceChildren(...rows.map(libItem));
+}
+
+function libItem(r: LibRow): HTMLElement {
+  const h = r.header;
+  const li = el("li");
+  if (!h) {
+    li.append(el("div", { className: "lib-main" }, el("h2", {}, r.key.split(/[\\/]/).pop() ?? "World"), el("p", { className: "field-error" }, `Can't read this file: ${r.error ?? "unknown format"}`)));
+    return li;
+  }
+  const flags = [h.drunk && "Drunk", h.not_the_bees && "Not the Bees", h.for_the_worthy && "For the Worthy", h.celebration && "Celebration",
+    h.the_constant && "The Constant", h.remix && "Remix", h.no_traps && "No Traps", h.zenith && "Zenith", h.skyblock && "Skyblock"].filter(Boolean);
+  const meta = [sizeName(h.width), MODES[h.game_mode] ?? "Classic", h.drunk ? "both evils" : h.crimson ? "Crimson" : "Corruption", ...flags].join(", ");
+  const where = r.source === "terraria" ? "In Terraria" : r.source === "worldseed" ? "Kept by Worldseed" : "In this browser";
+  const open = el("button", { type: "button", className: "btn btn--primary" }, "Open map");
+  open.addEventListener("click", () => openLibRow(r));
+  const actions: HTMLElement[] = [open];
+  if (r.source === "worldseed" && r.path) {
+    const put = el("button", { type: "button", className: "btn btn--secondary" }, "Put in Terraria");
+    put.addEventListener("click", async () => {
+      try {
+        const dest = await desk.installWorld(r.path!, h.name);
+        toast(`Saved to your Terraria worlds as ${dest.split(/[\\/]/).pop()}`);
+        renderLibrary(true);
+      } catch (e) {
+        toast(String(e), true);
+      }
+    });
+    actions.push(put);
+  }
+  if (r.path) {
+    const show = el("button", { type: "button", className: "link" }, navigator.userAgent.includes("Mac") ? "Show in Finder" : "Show in folder");
+    show.addEventListener("click", () => desk.revealPath(r.path!).catch((e) => toast(String(e), true)));
+    actions.push(show);
+  }
+  if (r.source !== "terraria") {
+    const rm = el("button", { type: "button", className: "link" }, "Remove");
+    rm.addEventListener("click", async () => {
+      if (!confirm(`Remove ${h.name} from the library? ${r.source === "worldseed" ? "The file is deleted." : "It is forgotten by this browser."}`)) return;
+      try {
+        r.path ? await desk.removeWorld(r.path) : await removeWeb(r.key);
+        renderLibrary(true);
+      } catch (e) {
+        toast(String(e), true);
+      }
+    });
+    actions.push(rm);
+  }
+  li.append(
+    el("div", { className: "lib-main" },
+      el("h2", {}, h.name),
+      el("p", { className: "lib-meta" }, meta),
+      el("p", { className: "lib-sub" }, el("span", {}, `${where}, ${dateFmt.format(new Date(r.when))}`), el("code", {}, h.seed || "no seed")),
+    ),
+    el("div", { className: "lib-actions" }, ...actions),
+  );
+  return li;
+}
+
+$("lib-search").addEventListener("input", () => renderLibrary());
+$("lib-refresh").addEventListener("click", () => renderLibrary(true));
+for (const b of $("lib-filter").querySelectorAll<HTMLButtonElement>("button")) {
+  b.addEventListener("click", () => {
+    libFilter = b.dataset.f!;
+    for (const o of $("lib-filter").querySelectorAll("button")) o.setAttribute("aria-pressed", String(o === b));
+    renderLibrary();
+  });
+}
+
 /* ---------- in-app updates ---------- */
 const UPDATE_EVERY = 6 * 60 * 60 * 1000;
 async function checkForUpdate(manual = false) {
@@ -993,7 +1139,7 @@ async function boot() {
   renderCatalog();
   renderPresets();
   renderGoals();
-  const hashTab = ({ "#seeds": "tab-seeds", "#create": "tab-create", "#find": "tab-find" } as Record<string, string>)[location.hash];
+  const hashTab = ({ "#seeds": "tab-seeds", "#create": "tab-create", "#find": "tab-find", "#library": "tab-library" } as Record<string, string>)[location.hash];
   if (hashTab) showTab(hashTab);
   if (desk.isDesktop) {
     try {

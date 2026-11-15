@@ -161,7 +161,15 @@ impl World {
         if t == 0 { None } else { Some(t - 1) }
     }
 
-    pub fn parse(d: &[u8]) -> R<World> {
+    /// Only the header: name, seed, size, mode, flags. Fast enough to list a whole Worlds folder.
+    pub fn parse_header(d: &[u8]) -> R<Header> {
+        Ok(Self::prelude(d)?.0)
+    }
+
+    fn prelude(d: &[u8]) -> R<(Header, Vec<usize>, Vec<bool>)> {
+        if d.len() < 32 {
+            return Err("This is not a Terraria world file.".into());
+        }
         let mut r = Reader::new(d);
         let version = r.u32()?;
         if version < 194 {
@@ -251,6 +259,13 @@ impl World {
             h.game_version = String::from_utf8_lossy(&d[s..e]).into_owned();
         }
 
+        Ok((h, sec, frame_imp))
+    }
+
+    pub fn parse(d: &[u8]) -> R<World> {
+        let (h, sec, frame_imp) = Self::prelude(d)?;
+        let version = h.version;
+        let mut r = Reader::new(d);
         // --- tiles ---
         r.pos = sec[1];
         let w = h.width as usize;

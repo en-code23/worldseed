@@ -61,6 +61,13 @@ mod wasm {
         crate::seed::build(&o)
     }
 
+    /// Header only (name, seed, size, mode, flags) as JSON, for the library list.
+    #[wasm_bindgen]
+    pub fn world_header(bytes: &[u8]) -> Result<String, JsError> {
+        let h = crate::World::parse_header(bytes).map_err(|e| JsError::new(&e))?;
+        Ok(serde_json::to_string(&h).unwrap_or_default())
+    }
+
     #[wasm_bindgen]
     pub fn seed_catalog() -> String {
         crate::seed::catalog_json()
