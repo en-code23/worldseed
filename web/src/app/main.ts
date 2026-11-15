@@ -635,6 +635,7 @@ async function genOnce(install: boolean) {
   prog.hidden = false;
   const buttons = [$<HTMLButtonElement>("gen-preview"), $<HTMLButtonElement>("gen-install")];
   buttons.forEach((b) => (b.disabled = true));
+  generating = true;
   const off = await desk.on<{ pct: number; step: string }>("gen-progress", (p) => {
     $<HTMLProgressElement>("gen-bar").value = p.pct;
     $("gen-step").textContent = `${p.step} (${p.pct.toFixed(0)}%)`;
@@ -654,6 +655,7 @@ async function genOnce(install: boolean) {
     off();
     prog.hidden = true;
     buttons.forEach((b) => (b.disabled = false));
+    generating = false;
   }
 }
 $("gen-preview").addEventListener("click", () => genOnce(false));
@@ -926,6 +928,47 @@ function renderCatalog() {
   fill("cat-secrets", state.catalog.secrets);
 }
 
+/* ---------- in-app updates ---------- */
+const UPDATE_EVERY = 6 * 60 * 60 * 1000;
+async function checkForUpdate(manual = false) {
+  const chip = $<HTMLButtonElement>("update-chip");
+  try {
+    if (desk.isDesktop) {
+      const u = await desk.checkDesktopUpdate();
+      if (!u) {
+        if (manual) toast(`Worldseed ${__APP_VERSION__} is the latest version.`);
+        return;
+      }
+      chip.hidden = false;
+      chip.disabled = false;
+      chip.textContent = `Update to ${u.version}`;
+      chip.title = u.notes || `Worldseed ${u.version} is ready to install.`;
+      chip.onclick = async () => {
+        if (findRunningOrGenerating() && !confirm("A world is being generated. Updating restarts Worldseed and stops it. Update now?")) return;
+        chip.disabled = true;
+        chip.textContent = "Downloading…";
+        try {
+          await u.install((pct) => (chip.textContent = pct >= 100 ? "Restarting…" : `Downloading ${pct}%`));
+        } catch (e) {
+          chip.disabled = false;
+          chip.textContent = `Update to ${u.version}`;
+          toast(`The update could not be installed. ${String(e)} You can also download it from the website.`, true);
+        }
+      };
+    } else if (desk.isNativeMobile) {
+      const u = await desk.checkMobileUpdate();
+      if (!u) return;
+      chip.hidden = false;
+      chip.textContent = `Get ${u.version}`;
+      chip.onclick = () => window.open(u.url, "_blank");
+    }
+  } catch (e) {
+    if (manual) toast(`Could not check for updates. ${String(e)}`, true);
+  }
+}
+let generating = false;
+const findRunningOrGenerating = () => findRunning || generating;
+
 /* ---------- boot ---------- */
 async function boot() {
   const vsel = $<HTMLSelectElement>("version");
@@ -962,8 +1005,12 @@ async function boot() {
       toast(String(e), true);
     }
     installChip();
+    setTimeout(() => checkForUpdate(), 3000);
+    setInterval(() => checkForUpdate(), UPDATE_EVERY);
   } else {
     $("worlds-hint").textContent = "Worlds are in Documents/My Games/Terraria/Worlds on Windows, and ~/Library/Application Support/Terraria/Worlds on Mac.";
   }
 }
-boot();
+boot().then(() => {
+  if (desk.isNativeMobile) setTimeout(() => checkForUpdate(), 3000);
+});

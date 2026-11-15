@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Worldseed",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "identifier": "app.worldseed.desktop",
   "build": {
     "frontendDist": "../../web/dist",
@@ -11,15 +11,43 @@
   },
   "app": {
     "windows": [
-      { "label": "main", "title": "Worldseed", "url": "app/index.html", "width": 1320, "height": 860, "minWidth": 900, "minHeight": 600 }
+      {
+        "label": "main",
+        "title": "Worldseed",
+        "url": "app/index.html",
+        "width": 1320,
+        "height": 860,
+        "minWidth": 900,
+        "minHeight": 600
+      }
     ],
-    "security": { "csp": null }
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "category": "Utility",
-    "shortDescription": "Terraria seed generator and map viewer"
+    "shortDescription": "Terraria seed generator and map viewer",
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE5OEIyMDA1NjIyNkRGQ0UKUldUTzN5WmlCU0NMR1J2MWFKQXYrK0YrZmJiODN6OFE3dTlzZTRhUlN2Vm42OGVqMTFUbnVkUDEK",
+      "endpoints": [
+        "https://github.com/en-code23/worldseed/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

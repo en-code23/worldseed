@@ -45,6 +45,13 @@ npx cap open android   # or: npx cap open ios
 
 Tagging `v*` builds the Mac (universal), Windows, Linux and Android downloads in GitHub Actions and attaches them to a release. Pushing to `main` deploys the website to GitHub Pages.
 
+## Updates
+
+- **Desktop:** the app checks GitHub Releases on launch and every 6 hours. When a signed update exists, an "Update to x.y.z" button appears in the top bar; it downloads, installs and restarts. Updates are signed with the key in the `TAURI_SIGNING_PRIVATE_KEY` repo secret, and the app trusts only the matching public key in `tauri.conf.json`. Keep a backup of the private key: without it, installed apps can't be updated.
+- **Android:** the app compares its version with the latest release and offers the new APK.
+- **Web:** always the latest version.
+- To release: bump `version` in `desktop/src-tauri/tauri.conf.json` (the single source for every platform), commit, then tag `vX.Y.Z` and push the tag.
+
 ## Notes
 
 - The desktop apps aren't code-signed. On Mac, right-click the app and choose Open the first time. On Windows, choose More info, then Run anyway.

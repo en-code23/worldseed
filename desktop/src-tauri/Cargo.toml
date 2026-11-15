@@ -1,6 +1,6 @@
 [package]
 name = "worldseed"
-version = "0.1.1"
+version = "0.1.2"
 description = "Worldseed: Terraria seed generator and world map viewer"
 edition = "2021"
 license = "MIT"
@@ -12,10 +12,14 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-updater = "2"
+
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
+tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 seedcore = { path = "../../core" }
